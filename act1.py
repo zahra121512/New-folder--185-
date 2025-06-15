@@ -1,91 +1,81 @@
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 
-def display_image(title, image):
-    """Utility function to display an image."""
-    cv2.imshow(title, image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+# Load the image
+image = cv2.imread('your_image.jpg')  # <-- Replace with your image path
+if image is None:
+    raise ValueError("Image not found. Check the path to 'your_image.jpg'.")
 
-def apply_color_filter(image, filter_type, intensity=50):
-    """Apply the specified color filter to the image."""
-    filtered_image = image.copy()
-    
-    if filter_type == "red_tint":
-        filtered_image[:, :, 1] = 0  # Green channel
-        filtered_image[:, :, 0] = 0  # Blue channel
-    elif filter_type == "blue_tint":
-        filtered_image[:, :, 1] = 0  # Green
-        filtered_image[:, :, 2] = 0  # Red
-    elif filter_type == "green_tint":
-        filtered_image[:, :, 0] = 0  # Blue
-        filtered_image[:, :, 2] = 0  # Red
-    elif filter_type == "increase_red":
-        filtered_image[:, :, 2] = cv2.add(filtered_image[:, :, 2], intensity)
-    elif filter_type == "decrease_red":
-        filtered_image[:, :, 2] = cv2.subtract(filtered_image[:, :, 2], intensity)
-    elif filter_type == "increase_green":
-        filtered_image[:, :, 1] = cv2.add(filtered_image[:, :, 1], intensity)
-    elif filter_type == "decrease_green":
-        filtered_image[:, :, 1] = cv2.subtract(filtered_image[:, :, 1], intensity)
-    elif filter_type == "decrease_blue":
-        filtered_image[:, :, 0] = cv2.subtract(filtered_image[:, :, 0], intensity)
-    
-    return filtered_image
+# Convert from BGR (OpenCV default) to RGB (for matplotlib)
+image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-def save_image(image):
-    """Allow the user to save the filtered image."""
-    filename = input("Enter a name for the image (without the extension): ")
-    filename = "".join(c for c in filename if c.isalnum() or c in ('_', '-'))
-    cv2.imwrite(f"images/{filename}.png", image)
-    print(f"Image saved as images/{filename}.png")
+# ---------- 1. Rotate Image ----------
+def rotate_image(img, angle):
+    (h, w) = img.shape[:2]
+    center = (w // 2, h // 2)
 
-def interactive_color_filter(image_path):
-    """Interactive activity for real-time color filter application."""
-    image = cv2.imread(image_path)
-    if image is None:
-        print("Error: image not found.")
-        return
+    # Rotation matrix
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
 
-    print("\nSelect an option:")
-    print("r - red tint")
-    print("b - blue tint")
-    print("g - green tint")
-    print("i - increase red intensity")
-    print("d - decrease red intensity")
-    print("u - increase green intensity")
-    print("x - decrease green intensity")
-    print("q - quit")
+    # Compute the new bounding dimensions of the image
+    cos = np.abs(M[0, 0])
+    sin = np.abs(M[0, 1])
+    new_w = int((h * sin) + (w * cos))
+    new_h = int((h * cos) + (w * sin))
 
-    while True:
-        filter_type = input("Enter your choice: ").lower()
+    # Adjust the rotation matrix
+    M[0, 2] += (new_w / 2) - center[0]
+    M[1, 2] += (new_h / 2) - center[1]
 
-        if filter_type == "r":
-            filtered_image = apply_color_filter(image, "red_tint")
-        elif filter_type == "b":
-            filtered_image = apply_color_filter(image, "blue_tint")
-        elif filter_type == "g":
-            filtered_image = apply_color_filter(image, "green_tint")
-        elif filter_type == "i":
-            filtered_image = apply_color_filter(image, "increase_red", intensity=50)
-        elif filter_type == "d":
-            filtered_image = apply_color_filter(image, "decrease_red", intensity=50)
-        elif filter_type == "u":
-            filtered_image = apply_color_filter(image, "increase_green", intensity=50)
-        elif filter_type == "x":
-            filtered_image = apply_color_filter(image, "decrease_green", intensity=50)
-        elif filter_type == "q":
-            print("Exiting...")
-            break
-        else:
-            print("Invalid choice.")
-            continue
+    rotated = cv2.warpAffine(img, M, (new_w, new_h))
+    return rotated
 
-        display_image("Filtered Image", filtered_image)
+rotated_image = rotate_image(image, 45)
+rotated_rgb = cv2.cvtColor(rotated_image, cv2.COLOR_BGR2RGB)
 
-        save_choice = input("Do you want to save this image? (yes/no): ")
-        if save_choice.lower() == "yes":
-            save_image(filtered_image)
+# ---------- 2. Crop Image ----------
+def crop_image(img, start_x, start_y, width, height):
+    return img[start_y:start_y + height, start_x:start_x + width]
 
-# Example usage
-# interactive_color_filter("images/example.jpg")
+cropped_image = crop_image(image, 50, 50, 200, 200)
+cropped_rgb = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2RGB)
+
+# ---------- 3. Adjust Brightness ----------
+def adjust_brightness(img, value=30):
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    h, s, v = cv2.split(hsv)
+
+    # Add brightness
+    v = cv2.add(v, value)
+    v = np.clip(v, 0, 255).astype(np.uint8)
+
+    final_hsv = cv2.merge((h, s, v))
+    bright_img = cv2.cvtColor(final_hsv, cv2.COLOR_HSV2BGR)
+    return bright_img
+
+bright_image = adjust_brightness(image, value=50)
+bright_rgb = cv2.cvtColor(bright_image, cv2.COLOR_BGR2RGB)
+
+# ---------- Display with matplotlib ----------
+fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+
+axes[0, 0].imshow(image_rgb)
+axes[0, 0].set_title("Original Image")
+axes[0, 0].axis('off')
+
+axes[0, 1].imshow(rotated_rgb)
+axes[0, 1].set_title("Rotated Image (45°)")
+axes[0, 1].axis('off')
+
+axes[1, 0].imshow(cropped_rgb)
+axes[1, 0].set_title("Cropped Image")
+axes[1, 0].axis('off')
+
+axes[1, 1].imshow(bright_rgb)
+axes[1, 1].set_title("Brightness Increased")
+axes[1, 1].axis('off')
+
+plt.tight_layout()
+plt.show()
+
